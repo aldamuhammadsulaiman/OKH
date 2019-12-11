@@ -1,5 +1,5 @@
-source("D:/base.R")
-source("D:/heuristic.R")
+source("D:/okh_fix/base.R")
+source("D:/okh_fix/heuristic.R")
 library(compiler)
 enableJIT(3)
 hcPrepare <- function(sol) {
@@ -7,7 +7,10 @@ hcPrepare <- function(sol) {
   for (i in 1:length(unique(sol[,2]))) {
     dlist[[i]]<-list()
     for (j in 1:length(sol[sol[,2]==i,2])) {
-      dlist[[i]]<-append(dlist[[i]],sol[sol[,2]==i,][j,1])
+      if (length(sol[sol[,2]==i,2])==1) 
+        dlist[[i]]<-append(dlist[[i]],sol[sol[,2]==i,][1])
+      else
+        dlist[[i]]<-append(dlist[[i]],sol[sol[,2]==i,][j,1])
     }
   }
   countCourse(dlist)
@@ -34,7 +37,7 @@ listIndex <- function (x) {
 #       rnd_timeslot<-round(runif(1,1,length(unique(index_tab$X1))))
 #     x[[index_tab[rnd,1]]][[index_tab[rnd,2]]]<-NULL
 #     x[[rnd_timeslot]]<-append(x[[rnd_timeslot]],rnd)
-#     candidate_sol_pen<-calculatePen_swap(x,cm,rnd_timeslot)
+#     candidate_sol_pen<-calculatePen_move(x,cm,rnd_timeslot)
 #     if (current_sol_pen>candidate_sol_pen){
 #       # if (length(x[[index_tab[rnd,1]]])>((index_tab[rnd,2])-1)){
 #       #   for (j in (index_tab[rnd,2]+1):length(x[[index_tab[[rnd,1]]]])) {
@@ -54,7 +57,7 @@ listIndex <- function (x) {
 #   print(paste("Penalty for final solution after ",maxIter," iterations: ",current_sol_pen,sep = ""))
 #   return(current_sol)
 # }
-# calculatePen_swap<-function (timeslotlist,test,x) {
+# calculatePen_move<-function (timeslotlist,test,x) {
 #   cost<-0
 #   tsxlength<-length(timeslotlist[[x]])
 #   if(tsxlength>1) {
@@ -87,11 +90,10 @@ listIndex <- function (x) {
 # }
 # 
 getCM <- function(fname) {
-  filename_noext<-sub("\\..*","",fname)
-  cmat<-read.csv(paste(filename_noext,".cm",sep = ""),sep=",",header=TRUE)
-  #cmat<-as.data.table(cmat)
-  return(cmat)
-
+   filename_noext<-sub("\\..*","",fname)
+   cmat<-read.csv(paste(filename_noext,".cm",sep = ""),sep=",",header=TRUE)
+   cmat<-data.matrix(cmat)
+   return(cmat)   
 }
 # 
 # 
@@ -101,6 +103,8 @@ getCM <- function(fname) {
 
 stochastic_hillclimb <- function(current_sol,cm,maxiter,stud_amount) {
   start<-Sys.time()
+  iteration_pen<-matrix(0,nrow=maxiter,ncol=1)
+  pen<-calculatePen(hcPrepare(current_sol),cm)
   for (i in 1:maxiter) {
     rand_exam<-round(runif(1,1,nrow(current_sol)),0)
     curr_ts<-current_sol[current_sol[,1]==rand_exam,2]
@@ -108,15 +112,19 @@ stochastic_hillclimb <- function(current_sol,cm,maxiter,stud_amount) {
     lnt<-length(unique(current_sol[,2]))
     while (rand_ts==curr_ts)
       rand_ts<-round(runif(1,1,lnt))
-    if(calculatePen_swap(current_sol,cm,current_sol[current_sol[,1]==rand_exam,2],rand_ts,rand_exam,stud_amount)<0) {
+    iter_pen<-calculatePen_move(current_sol,cm,current_sol[current_sol[,1]==rand_exam,2],rand_ts,rand_exam,stud_amount)
+    if(iter_pen<0) {
       current_sol[current_sol[,1]==rand_exam,2]<-rand_ts
+      pen<-pen+iter_pen
     }
+    iteration_pen[i]<-pen
   }
+  plot(iteration_pen, type = "l")
   print(Sys.time()-start)
   return (current_sol)
 }
 
-calculatePen_swap <- function(sol,cm,init,target,exam,stud) {
+calculatePen_move <- function(sol,cm,init,target,exam,stud) {
   sol_target<-sol[sol[,2]==target,1]
   for(i in 1:length(sol_target)) {
     if(cm[sol_target[i],exam]>0) {
@@ -132,8 +140,7 @@ calculatePen_swap <- function(sol,cm,init,target,exam,stud) {
     }
     neighbor<-sol[(sol[,2]<check_ts[[i]] & sol[,2]>(check_ts[[i]]-6)) | (sol[,2]>check_ts[[i]] & sol[,2]<(check_ts[[i]]+6)) ,]
     for (j in 1:nrow(neighbor))
-      delta<-delta+(cm[sol[sol[,1]==exam,1],neighbor[j,1]]*2^5-abs(check_ts[[i]]-neighbor[j,2]))
+      delta<-delta+(cm[sol[sol[,1]==exam,1],neighbor[j,1]]*2^(5-abs(check_ts[[i]]-neighbor[j,2])))
   }
   return (delta/stud)
 }
-

@@ -1,5 +1,6 @@
+
 library(tibble)
-source("D:/base.R")
+source("D:/okh_fix/base.R")
 
 #largest degree first heuristic
 sortLargest <- function(testt) {
@@ -25,6 +26,7 @@ sortLargestW <- function(testt,test) {
   rownames(test)<-test$rname
   test<-test[,-1]
   test<-test[,-ncol(test)]
+  summed<-test[,ncol(test)]
   test<-test[,-ncol(test)]
   testt<-testt[,-ncol(testt)]
   testt<-testt[,-ncol(testt)]
@@ -33,75 +35,59 @@ sortLargestW <- function(testt,test) {
   test<-test[,order(-test[nrow(test),],-test[nrow(test)-1,])]
   test<-test[-nrow(test),]
   test<-test[-nrow(test),]
+  test[,ncol(test)+1]<-summed
   return (test)
 }
 
-createTimeslot <- function(testt,test) {
-  nc2<-ncol(test)
+createTimeslot <- function(test) {
   timeslotlist<-list()
   timeslotlist[[1]]<-list()
   timeslotlist[[1]]<-append(timeslotlist[[1]],as.integer(rownames(test[1,])))
   test<-test[-1,]
   
   while(nrow(test)>0){
-    most_str<-getLeastSaturated(timeslotlist,test)
-    if(most_str$tsllist[[1]]>0)  {
-      timeslotlist[[as.integer(most_str$tsllist[[1]])]]<-append( timeslotlist[[as.integer(most_str$tsllist[[1]])]],most_str$exam)
+    most_str<-getMostSaturated(timeslotlist,test)
+    if(most_str[[2]]>0)  {
+      timeslotlist[[as.integer(most_str[[2]])]]<-append( timeslotlist[[as.integer(most_str[[2]])]],most_str[[1]])
     } else {
       timeslotlist[[length(timeslotlist)+1]]<-list()
-      timeslotlist[[length(timeslotlist)]][[1]]<-most_str$exam
+      timeslotlist[[length(timeslotlist)]][[1]]<-most_str[[1]]
     }
-    test<-test[!row.names(test)==paste(most_str$exam),]
+    test<-test[!row.names(test)==paste(most_str[[1]]),]
+    # timeslotlist
   }
-  
-  # for (i in 2:nc2) {
-  #   j<-length(timeslotlist)
-  #   for (k in 1:j){
-  #     p<-0
-  #     l<-length(timeslotlist[[k]])
-  #     for (m in 1:l)
-  #       p<-pmax(p,testt[timeslotlist[[k]][[m]],i])
-  #     if(p==0) {
-  #       timeslotlist[[k]]<-append(timeslotlist[[k]],rownames(testt[i,]))
-  #       break;
-  #     }
-  #     else if (k==j) {
-  #       timeslotlist[[length(timeslotlist)+1]]<-list()
-  #       timeslotlist[[length(timeslotlist)]][[1]]<-rownames(testt[i,])
-  #     }
-  #   }
-  # }
   return (timeslotlist)  
 }
-#getLeastSaturated(timeslotlist,test)
-getLeastSaturated <- function (tslot,exam) {
-  str_table<<-data.frame(exam=numeric(0),TimeslotConf=integer(0),ExamConf=integer(0),EnrollConf=integer(0))
-  str_table$tsllist<-list()
-  for (i in 1:nrow(exam)) {
-    tslconf<-0
-    tot.exconf<-0
-    enrconf<-0
-    tsllist<-list()
-    for (j in 1:length(tslot)) {
-      exconf<-0
-      for (k in 1:length(tslot[[j]])) {
-        enrcheck<-exam[i,paste("X",tslot[[j]][[k]],sep = "")]
-        if (enrcheck>0) {
-          enrconf<-enrconf+enrcheck
-          exconf<-exconf+1
-        }
-      }
-      if (exconf>0) {
-        tslconf<-tslconf+1
-        tot.exconf<-tot.exconf+exconf
-      }
-      else
-        tsllist<-append(tsllist,j)
+getMostSaturated <- function (tslot,exam) {
+  satur_mat<-matrix(0,nrow=nrow(exam),ncol=length(tslot)+5)
+  nc<-ncol(satur_mat)
+  excol<-nc-4
+  encol<-nc-3
+  scol<-nc-2
+  ccol<-nc-1
+  for (i in 1:length(tslot)) {
+    for (j in 1:length(tslot[[i]])) {
+      xx<-exam[,paste("X",tslot[[i]][[j]],sep = "")]
+      satur_mat[,excol]<-ifelse(xx>0,satur_mat[,i]+1,satur_mat[,i])
+      satur_mat[,i]<-satur_mat[,i]+xx
     }
-    str_table[nrow(str_table)+1,]<-c(as.integer(row.names(exam[i,])),tslconf,tot.exconf,enrconf,ifelse(length(tsllist)==0,0,tsllist))
-    str_table<-str_table[order(-str_table[,2],-str_table[,3],-str_table[,4]),]
   }
-  return(str_table[1,])
+  satur_mat[,scol]<-rowSums(satur_mat)
+  satur_mat[,ccol]<-rowSums(satur_mat[,1:ifelse(nc==6,1,nc-5),drop=FALSE]>0)
+  satur_mat[,nc]<-as.integer(row.names(exam))
+  satur_mat[,encol]<-exam[paste(satur_mat[,nc]),ncol(exam)]
+  p<-max(satur_mat[,ccol])
+  if(grepl("kfu",filename))
+    maxs<-satur_mat[order(-satur_mat[,ccol],-satur_mat[,scol],-satur_mat[,excol],-satur_mat[,encol]),]
+  else
+    maxs<-satur_mat[order(-satur_mat[,ccol],-satur_mat[,excol],-satur_mat[,scol],-satur_mat[,encol]),]
+  
+  if(is.null(ncol(maxs))) 
+    maxs<-t(maxs)
+  if (nc!=5 & p<(nc-5)) {
+    return(list(maxs[1,nc],which(maxs[1,1:(nc-5)]==0)[[1]]))
+  }
+  return(list(maxs[1,nc],0))
 }
 calculatePen<-function (timeslotlist,test) {
   cost<-0
@@ -137,13 +123,13 @@ calculatePen<-function (timeslotlist,test) {
 
 runAll <- function(data,filename) {
   starttime<-Sys.time()
-  test<<-createCM(data)
+  test<-createCM(data)
+  cms<-test
   export_cm(test,filename)
   testt<-createBinaryCM(test)
   test<-sortLargestW(testt,test)
-  timeslotlist<<-createTimeslot(testt,test)
+  timeslotlist<<-createTimeslot(test)
   print(Sys.time()-starttime)
-  print(calculatePen(timeslotlist,test))
+  print(calculatePen(timeslotlist,cms))
   export(timeslotlist,filename)
 }
-

@@ -57,8 +57,7 @@ export_cm<- function (cm, filename) {
     write.csv(cm,file=paste(filename_noext,".cm",sep = ""), row.names = FALSE)
 }
 
-export_tab<-function(sol,filename) {
-  sol$V2<-sol$V2-1
-  write.table(sol,file=paste(sub("\\..*","",filename),".sol",sep = ""),sep=" ",row.names=FALSE,col.names=FALSE)
+export_tab<-function(sol,filename,suffix) {
+  sol[,2]<-sol[,2]-1
+  write.table(sol,file=paste(sub("\\..*","",filename),"-",suffix,".sol",sep = ""),sep=" ",row.names=FALSE,col.names=FALSE)
 }
-
